@@ -14,7 +14,7 @@ SIM_CTX    := kind-$(SIM_CLUSTER)
 KSERVE_CTX := kind-$(KSERVE_CLUSTER)
 CACHE      := .cache
 
-.PHONY: help install-tools-arch check-tools sim-up sim-test sim-routing sim-down kserve-up kserve-test kserve-down down
+.PHONY: help install-tools-arch check-tools sim-up sim-cluster sim-router sim-pods sim-test sim-routing sim-down kserve-up kserve-test kserve-down down
 
 help: ## Show targets
 	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -36,17 +36,24 @@ check-tools: ## Verify docker, kind, kubectl, helm are installed and docker is r
 # Stage 1: llm-d router (Envoy + EPP) -> simulated vLLM. No GPU, no model download.
 # ---------------------------------------------------------------------------
 
-sim-up: check-tools ## Create kind cluster and deploy llm-d router + vLLM simulator
+sim-up: sim-cluster sim-router sim-pods ## All of stage 1: cluster, router, simulator pods
+	@echo; echo "Ready. Try: make sim-test"
+
+sim-cluster: check-tools ## Step 1: create the kind cluster
 	kind get clusters | grep -qx $(SIM_CLUSTER) || \
 	  kind create cluster --name $(SIM_CLUSTER) --image $(KIND_NODE_IMAGE) --config kind/cluster.yaml
+	kubectl --context $(SIM_CTX) wait --for=condition=Ready node --all --timeout=2m
+
+sim-router: ## Step 2: install InferencePool CRDs and the llm-d router (Envoy + EPP)
 	kubectl --context $(SIM_CTX) apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/$(GAIE_VERSION)/v1-manifests.yaml
 	kubectl --context $(SIM_CTX) create namespace $(SIM_NS) --dry-run=client -o yaml | kubectl --context $(SIM_CTX) apply -f -
-	sed "s|LLMD_SIM_IMAGE|$(LLMD_SIM_IMAGE)|" 01-llm-d-sim/simulator.yaml | kubectl --context $(SIM_CTX) -n $(SIM_NS) apply -f -
 	helm upgrade --install $(RELEASE) $(LLMD_ROUTER_CHART) --version $(LLMD_ROUTER_CHART_VERSION) \
 	  --kube-context $(SIM_CTX) -n $(SIM_NS) -f 01-llm-d-sim/router.values.yaml
+	kubectl --context $(SIM_CTX) -n $(SIM_NS) rollout status deploy/$(RELEASE)-epp --timeout=5m
+
+sim-pods: ## Step 3: deploy the simulated vLLM pods the router sends traffic to
+	sed "s|LLMD_SIM_IMAGE|$(LLMD_SIM_IMAGE)|" 01-llm-d-sim/simulator.yaml | kubectl --context $(SIM_CTX) -n $(SIM_NS) apply -f -
 	kubectl --context $(SIM_CTX) -n $(SIM_NS) rollout status deploy/vllm-sim --timeout=5m
-	kubectl --context $(SIM_CTX) -n $(SIM_NS) wait --for=condition=Available deploy --all --timeout=5m
-	@echo; echo "Ready. Try: make sim-test"
 
 sim-test: ## Send a completion through Envoy -> llm-d EPP -> simulator
 	@scripts/sim-test.sh $(SIM_CTX) $(SIM_NS) $(RELEASE)

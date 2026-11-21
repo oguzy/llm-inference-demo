@@ -35,7 +35,10 @@ make check-tools
 make help
 
 # Stage 1: simulated vLLM behind the llm-d router
-make sim-up
+make sim-up          # or step by step:
+#   make sim-cluster   kind cluster
+#   make sim-router    InferencePool CRDs + llm-d router (Envoy + EPP)
+#   make sim-pods      2 simulated vLLM pods
 make sim-test        # one completion through Envoy -> EPP -> sim
 make sim-routing     # same-prefix requests; shows which pod served them
 make sim-down
