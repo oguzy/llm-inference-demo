@@ -28,7 +28,7 @@ H := helm --kube-context $(CTX)
 .PHONY: help install-tools-arch install-kube-extras-arch check-tools cluster down \
 	gateway-crds gateway gateway-clean \
 	sim-up sim-router sim-pods sim-test sim-routing sim-clean \
-	kserve-up kserve-deps kserve-install kserve-model kserve-status kserve-test kserve-clean
+	kserve-up kserve-deps kserve-install kserve-model kserve-status kserve-logs kserve-logs-gateway kserve-logs-epp kserve-logs-vllm kserve-test kserve-clean
 
 help: ## Show targets
 	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
@@ -175,6 +175,18 @@ kserve-model: ## Deploy facebook/opt-125m as an LLMInferenceService (vLLM CPU)
 
 kserve-status: ## Show LLMInferenceService conditions, pods, route and recent events
 	@scripts/kserve-status.sh
+
+kserve-logs: ## Follow gateway, EPP and vLLM logs interleaved (TAIL=N for history)
+	@scripts/kserve-logs.sh all
+
+kserve-logs-gateway: ## Follow the Envoy access log for the shared Gateway
+	@scripts/kserve-logs.sh gateway
+
+kserve-logs-epp: ## Follow the llm-d scheduler (EPP) log for opt-125m
+	@scripts/kserve-logs.sh epp
+
+kserve-logs-vllm: ## Follow the vLLM log for opt-125m
+	@scripts/kserve-logs.sh vllm
 
 kserve-test: ## Send a completion to opt-125m through the shared Gateway
 	@scripts/kserve-test.sh
