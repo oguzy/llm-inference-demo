@@ -1,0 +1,38 @@
+# A real (tiny) model on vLLM CPU, managed by KServe.
+# router.scheduler brings in the llm-d endpoint picker; router.gateway and
+# router.route attach it to KServe's Envoy Gateway.
+# Based on kserve/kserve docs/samples/llmisvc/opt-125m-cpu at v0.21.0.
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: opt-125m
+spec:
+  model:
+    uri: hf://facebook/opt-125m
+    name: facebook/opt-125m
+  replicas: 1
+  router:
+    scheduler: {}
+    route: {}
+    gateway: {}
+  template:
+    containers:
+      - name: main
+        image: VLLM_CPU_IMAGE
+        securityContext:
+          runAsNonRoot: false
+        env:
+          - name: VLLM_CPU_KVCACHE_SPACE
+            value: "1"
+        resources:
+          limits:
+            cpu: "2"
+            memory: 10Gi
+          requests:
+            cpu: 500m
+            memory: 4Gi
+        livenessProbe:
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 30
+          failureThreshold: 5

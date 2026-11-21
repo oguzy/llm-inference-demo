@@ -1,0 +1,65 @@
+# Two simulated vLLM pods. The llm-d router picks between them using the
+# llm-d.ai/guide label (see router.values.yaml).
+#
+# The model name is a dummy, so the simulator uses its built-in tokenizer and
+# needs no HuggingFace download or vLLM render sidecar.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-sim
+  labels:
+    app: vllm-sim
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vllm-sim
+      llm-d.ai/guide: llm-inference-demo
+  template:
+    metadata:
+      labels:
+        app: vllm-sim
+        llm-d.ai/guide: llm-inference-demo
+    spec:
+      containers:
+        - name: vllm-sim
+          image: LLMD_SIM_IMAGE
+          imagePullPolicy: IfNotPresent
+          args:
+            - --model=demo/tiny-model
+            - --port=8000
+            - --time-to-first-token=100ms
+            - --inter-token-latency=20ms
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
