@@ -33,6 +33,10 @@ installs it; both only attach `HTTPRoute`s to it:
 For every request, Envoy asks the llm-d Endpoint Picker (EPP) over ext_proc
 which pod should serve it; the EPP picks by prompt-prefix cache affinity and load.
 
+[docs/kserve-request-path.html](docs/kserve-request-path.html) walks one KServe
+request through Envoy, the llm-d EPP and vLLM, with timings, log lines and which
+project does what. GitHub shows HTML as source, so open it locally in a browser.
+
 ## Requirements
 
 - Linux with Docker, about 8 CPU cores and 16 GB RAM
@@ -90,7 +94,8 @@ kind/                   single-node and multi-node cluster configs
 00-gateway/             GatewayClass (ClusterIP Envoy), shared Gateway, Envoy Gateway RBAC
 01-llm-d-sim/           router Helm values (gateway / standalone) + simulator Deployment
 02-kserve/              LLMInferenceService for opt-125m on CPU
-scripts/                tool check and test requests
+scripts/                tool check, test requests, status and logs
+docs/                   request-path diagram (open in a browser)
 ```
 
 ## Upstream references
