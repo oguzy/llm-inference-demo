@@ -67,6 +67,7 @@ make sim-routing     # shared-prefix vs unrelated prompts; per-pod request count
 make kserve-deps     # cert-manager
 make kserve-install  # KServe LLMInferenceService controller (helm charts), no gateway of its own
 make kserve-model    # facebook/opt-125m as an LLMInferenceService
+make kserve-status   # conditions, pods, route, recent events (watch -n5 make -s kserve-status)
 make kserve-test
 
 make down            # delete the cluster

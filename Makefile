@@ -28,7 +28,7 @@ H := helm --kube-context $(CTX)
 .PHONY: help install-tools-arch install-kube-extras-arch check-tools cluster down \
 	gateway-crds gateway gateway-clean \
 	sim-up sim-router sim-pods sim-test sim-routing sim-clean \
-	kserve-up kserve-deps kserve-install kserve-model kserve-test kserve-clean
+	kserve-up kserve-deps kserve-install kserve-model kserve-status kserve-test kserve-clean
 
 help: ## Show targets
 	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
@@ -172,6 +172,9 @@ kserve-model: ## Deploy facebook/opt-125m as an LLMInferenceService (vLLM CPU)
 	sed -e "s|VLLM_CPU_IMAGE|$(VLLM_CPU_IMAGE)|" -e "s|name: inference-gateway|name: $(GW_NAME)|" -e "s|namespace: llm-gateway|namespace: $(GW_NS)|" \
 	  02-kserve/opt-125m-cpu.yaml | $(K) -n $(MODEL_NS) apply -f -
 	$(K) -n $(MODEL_NS) wait --for=condition=Ready llminferenceservice/opt-125m --timeout=20m
+
+kserve-status: ## Show LLMInferenceService conditions, pods, route and recent events
+	@scripts/kserve-status.sh
 
 kserve-test: ## Send a completion to opt-125m through the shared Gateway
 	@scripts/kserve-test.sh
