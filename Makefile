@@ -17,7 +17,7 @@ CACHE      := .cache
 .PHONY: help check-tools sim-up sim-test sim-routing sim-down kserve-up kserve-test kserve-down down
 
 help: ## Show targets
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 check-tools: ## Verify docker, kind, kubectl, helm are installed and docker is reachable
 	@scripts/check-tools.sh
