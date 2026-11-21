@@ -13,6 +13,15 @@ download. Stage 2 runs a real (tiny) model on the CPU.
 | 1. `sim` | llm-d router (Envoy sidecar + endpoint picker) and 2 simulated vLLM pods ([llm-d-inference-sim](https://github.com/llm-d/llm-d-inference-sim)) | client → Envoy → llm-d EPP picks a pod (prefix-cache + load aware) → vllm-sim |
 | 2. `kserve` | KServe `LLMInferenceService` with Envoy Gateway, the llm-d scheduler and vLLM CPU serving `facebook/opt-125m` | client → Envoy Gateway → llm-d scheduler → vLLM |
 
+By default each cluster is a single node that runs both the control plane and
+the workloads. For stage 1 you can use 1 control-plane + 2 workers instead, which
+puts the two simulator pods on different nodes:
+
+```bash
+make sim-cluster KIND_CONFIG=kind/cluster-multinode.yaml
+kubectl --context kind-llmd-sim get pods -n llm-d-sim -o wide   # after sim-pods
+```
+
 Each stage gets its own kind cluster (`llmd-sim`, `llmd-kserve`), because the
 two upstreams pin different Gateway API / Inference Extension CRD versions.
 

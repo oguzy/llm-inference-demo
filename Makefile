@@ -9,6 +9,7 @@ KSERVE_CLUSTER ?= llmd-kserve
 SIM_NS         ?= llm-d-sim
 KSERVE_NS      ?= kserve-demo
 RELEASE        ?= demo
+KIND_CONFIG    ?= kind/cluster.yaml
 
 SIM_CTX    := kind-$(SIM_CLUSTER)
 KSERVE_CTX := kind-$(KSERVE_CLUSTER)
@@ -41,7 +42,7 @@ sim-up: sim-cluster sim-router sim-pods ## All of stage 1: cluster, router, simu
 
 sim-cluster: check-tools ## Step 1: create the kind cluster
 	kind get clusters | grep -qx $(SIM_CLUSTER) || \
-	  kind create cluster --name $(SIM_CLUSTER) --image $(KIND_NODE_IMAGE) --config kind/cluster.yaml
+	  kind create cluster --name $(SIM_CLUSTER) --image $(KIND_NODE_IMAGE) --config $(KIND_CONFIG)
 	kubectl --context $(SIM_CTX) wait --for=condition=Ready node --all --timeout=2m
 
 sim-router: ## Step 2: install InferencePool CRDs and the llm-d router (Envoy + EPP)
@@ -74,7 +75,7 @@ $(CACHE)/kserve-$(KSERVE_VERSION)-install.sh:
 
 kserve-up: check-tools $(CACHE)/kserve-$(KSERVE_VERSION)-install.sh ## Create kind cluster, install KServe LLMISVC stack, deploy opt-125m on CPU
 	kind get clusters | grep -qx $(KSERVE_CLUSTER) || \
-	  kind create cluster --name $(KSERVE_CLUSTER) --image $(KIND_NODE_IMAGE) --config kind/cluster.yaml
+	  kind create cluster --name $(KSERVE_CLUSTER) --image $(KIND_NODE_IMAGE) --config $(KIND_CONFIG)
 	kubectl config use-context $(KSERVE_CTX)
 	PLATFORM=kind bash $(CACHE)/kserve-$(KSERVE_VERSION)-install.sh
 	kubectl --context $(KSERVE_CTX) create namespace $(KSERVE_NS) --dry-run=client -o yaml | kubectl --context $(KSERVE_CTX) apply -f -

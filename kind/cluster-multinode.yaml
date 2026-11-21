@@ -1,0 +1,10 @@
+# 1 control-plane + 2 workers. Workloads run on the workers; the control-plane
+# keeps its default NoSchedule taint. All nodes are containers sharing this
+# machine's CPU and RAM, so this is for stage 1 (the simulator), not vLLM on CPU.
+#   make sim-cluster KIND_CONFIG=kind/cluster-multinode.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker

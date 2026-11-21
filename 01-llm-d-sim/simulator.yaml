@@ -21,6 +21,14 @@ spec:
         app: vllm-sim
         llm-d.ai/guide: llm-inference-demo
     spec:
+      # Prefer one pod per node on a multi-node cluster; still schedules on one node.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: vllm-sim
       containers:
         - name: vllm-sim
           image: LLMD_SIM_IMAGE
