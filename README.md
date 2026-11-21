@@ -21,12 +21,11 @@ two upstreams pin different Gateway API / Inference Extension CRD versions.
 - Linux with Docker, about 8 CPU cores and 16 GB RAM (stage 2 wants more headroom)
 - `docker`, `kind`, `kubectl`, `helm`, `curl`, `jq`
 
-On Arch:
+On Arch Linux:
 
 ```bash
-sudo pacman -S docker kubectl helm jq kind     # kind may need the AUR (kind-bin)
-sudo systemctl enable --now docker
-sudo usermod -aG docker $USER                  # then log out and back in
+make install-tools-arch   # pacman installs, enables docker, adds you to the docker group
+# log out and back in if it added you to the docker group
 make check-tools
 ```
 

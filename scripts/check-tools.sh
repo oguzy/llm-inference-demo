@@ -13,10 +13,7 @@ done
 if [[ $missing -eq 1 ]]; then
   cat <<'EOF'
 
-Install on Arch:
-  sudo pacman -S docker kubectl helm jq kind     # kind may need the AUR (kind-bin)
-  sudo systemctl enable --now docker
-  sudo usermod -aG docker $USER                  # then log out and back in
+On Arch Linux, run: make install-tools-arch
 EOF
   exit 1
 fi
