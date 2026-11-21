@@ -17,7 +17,7 @@ CACHE      := .cache
 .PHONY: help install-tools-arch check-tools sim-up sim-test sim-routing sim-down kserve-up kserve-test kserve-down down
 
 help: ## Show targets
-	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 install-tools-arch: ## Install docker, kind, kubectl, helm, jq on Arch Linux (uses sudo)
 	sudo pacman -S --needed --noconfirm docker kind kubectl helm jq curl
