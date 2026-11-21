@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
-# Usage: kserve-test.sh <kube-context> <namespace> <llminferenceservice>
-# Sends one completion to the URL KServe publishes in the LLMInferenceService status.
+# Sends one completion to opt-125m through the shared Gateway. Run via `make kserve-test`.
+# KServe publishes the model URL in status.url; its host is the Gateway's
+# in-cluster address, so we keep only the path and go through a port-forward.
 set -euo pipefail
+source "$(dirname "$0")/lib.sh"
 
-ctx=$1 ns=$2 name=$3
-
-url=$(kubectl --context "$ctx" -n "$ns" get llminferenceservice "$name" -o jsonpath='{.status.url}')
-if [[ -z "$url" ]]; then
-  echo "No status.url yet. Check: kubectl --context $ctx -n $ns describe llminferenceservice $name"
+name=opt-125m
+url=$(kubectl --context "$CTX" -n "$MODEL_NS" get llminferenceservice "$name" -o jsonpath='{.status.url}')
+if [[ -z $url ]]; then
+  echo "No status.url yet. Check: kubectl --context $CTX -n $MODEL_NS describe llminferenceservice $name" >&2
   exit 1
 fi
+path=/${url#*://*/}
+[[ $url == *://*/* ]] || path=
 
-echo "POST ${url}/v1/completions"
-curl -sS "${url}/v1/completions" \
+start_port_forward gateway
+
+echo "status.url = ${url}"
+echo "POST ${path}/v1/completions"
+curl -sS "${BASE_URL}${path}/v1/completions" \
   -H 'Content-Type: application/json' \
   -d '{"model":"facebook/opt-125m","prompt":"Kubernetes is","max_tokens":30}' | jq .

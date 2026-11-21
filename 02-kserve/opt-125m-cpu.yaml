@@ -1,6 +1,7 @@
 # A real (tiny) model on vLLM CPU, managed by KServe.
-# router.scheduler brings in the llm-d endpoint picker; router.gateway and
-# router.route attach it to KServe's Envoy Gateway.
+# router.scheduler brings in the llm-d endpoint picker; router.route makes
+# KServe create an HTTPRoute on the shared Gateway named in router.gateway.refs
+# (installed separately by `make gateway`, not by KServe).
 # Based on kserve/kserve docs/samples/llmisvc/opt-125m-cpu at v0.21.0.
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceService
@@ -14,7 +15,10 @@ spec:
   router:
     scheduler: {}
     route: {}
-    gateway: {}
+    gateway:
+      refs:
+        - name: inference-gateway
+          namespace: llm-gateway
   template:
     containers:
       - name: main

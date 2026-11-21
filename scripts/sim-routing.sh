@@ -1,30 +1,43 @@
 #!/usr/bin/env bash
-# Usage: sim-routing.sh <kube-context> <namespace> <helm-release>
-# Sends requests that share a long prompt prefix, then counts requests per
-# simulator pod. With prefix-cache-aware routing they should mostly land on
-# one pod; unrelated prompts should spread out.
+# Shows prefix-cache-aware routing. Round 1 sends requests that share a long
+# prompt prefix (expect most on one pod); round 2 sends unrelated short prompts
+# (expect them spread by load). Counts come from each simulator pod's
+# vllm:e2e_request_latency_seconds_count metric. Run via `make sim-routing`.
 set -euo pipefail
+source "$(dirname "$0")/lib.sh"
 
-ctx=$1 ns=$2 release=$3
-port=${LOCAL_PORT:-8080}
 n=${REQUESTS:-10}
+pods=$(kubectl --context "$CTX" -n "$SIM_NS" get pods -l app=vllm-sim -o jsonpath='{.items[*].metadata.name}')
 
-kubectl --context "$ctx" -n "$ns" port-forward "svc/${release}-epp" "${port}:80" >/dev/null 2>&1 &
-pf=$!
-trap 'kill $pf 2>/dev/null' EXIT
-sleep 2
+count() {
+  kubectl --context "$CTX" get --raw "/api/v1/namespaces/${SIM_NS}/pods/$1:8000/proxy/metrics" |
+    awk '/^vllm:e2e_request_latency_seconds_count/ {s += $2} END {print s + 0}'
+}
+
+snapshot() { for p in $pods; do echo "$p $(count "$p")"; done; }
+
+report() {
+  local before=$1 after
+  after=$(snapshot)
+  join <(sort <<<"$before") <(sort <<<"$after") | while read -r pod b a; do
+    printf '  %-32s %d\n' "$pod" $((a - b))
+  done
+}
+
+send() {
+  curl -sS -o /dev/null "${BASE_URL}/v1/completions" -H 'Content-Type: application/json' \
+    -d "{\"model\":\"demo/tiny-model\",\"prompt\":\"$1\",\"max_tokens\":5}"
+}
+
+start_port_forward "$ROUTER_MODE"
 
 prefix=$(printf 'You are a helpful assistant for a Kubernetes inference demo. %.0s' {1..40})
-since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+before=$(snapshot)
+for i in $(seq 1 "$n"); do send "${prefix} Question ${i}?"; done
+echo "Round 1: ${n} requests sharing a long prefix"
+report "$before"
 
-for i in $(seq 1 "$n"); do
-  curl -sS -o /dev/null "http://localhost:${port}/v1/completions" \
-    -H 'Content-Type: application/json' \
-    -d "{\"model\":\"demo/tiny-model\",\"prompt\":\"${prefix} Question ${i}?\",\"max_tokens\":5}"
-done
-
-echo "Requests with a shared prefix, per simulator pod:"
-for pod in $(kubectl --context "$ctx" -n "$ns" get pods -l app=vllm-sim -o name); do
-  count=$(kubectl --context "$ctx" -n "$ns" logs "$pod" --since-time="$since" | grep -c 'completions' || true)
-  echo "  ${pod#pod/}: ${count}"
-done
+before=$(snapshot)
+for i in $(seq 1 "$n"); do send "Unrelated question number ${i} ${RANDOM}${RANDOM}"; done
+echo "Round 2: ${n} unrelated short prompts"
+report "$before"

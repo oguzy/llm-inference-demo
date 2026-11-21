@@ -1,0 +1,41 @@
+## Values for oci://ghcr.io/llm-d/charts/llm-d-router-gateway (Gateway mode).
+## Deploys only the EPP and the InferencePool; Envoy comes from the shared
+## Gateway (make gateway). The HTTPRoute's gateway is set by the Makefile.
+
+router:
+  epp:
+    replicas: 1
+    flags:
+      v: 2
+    pluginsConfigFile: "demo-plugins.yaml"
+    pluginsCustomConfig:
+      demo-plugins.yaml: |
+        apiVersion: llm-d.ai/v1
+        kind: EndpointPickerConfig
+        plugins:
+        - type: approx-prefix-cache-producer
+        - type: inflight-load-producer
+        - type: prefix-cache-affinity-filter
+        - type: token-load-scorer
+        schedulingProfiles:
+        - name: default
+          plugins:
+          - pluginRef: prefix-cache-affinity-filter
+          - pluginRef: token-load-scorer
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 2Gi
+
+  inferencePool:
+    failureMode: "FailOpen"
+
+  modelServers:
+    protocol: http
+    matchLabels:
+      llm-d.ai/guide: llm-inference-demo
+
+httpRoute:
+  create: true

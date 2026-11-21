@@ -1,33 +1,41 @@
 # llm-inference-demo
 
 A local, GPU-free demo of a Kubernetes LLM inference stack:
-**Envoy → llm-d router → vLLM**, then the same thing managed by **KServe**.
+**Envoy Gateway → llm-d router → vLLM**, plus the same thing managed by **KServe**.
 
-It runs on a single machine with kind. Stage 1 needs no GPU and no model
-download. Stage 2 runs a real (tiny) model on the CPU.
+Everything runs in one kind cluster. The llm-d part uses simulated vLLM pods
+(no GPU, no model download); the KServe part runs a real tiny model on the CPU.
 
-## Stages
+## Architecture
 
-| Stage | What runs | Request path |
-|---|---|---|
-| 1. `sim` | llm-d router (Envoy sidecar + endpoint picker) and 2 simulated vLLM pods ([llm-d-inference-sim](https://github.com/llm-d/llm-d-inference-sim)) | client → Envoy → llm-d EPP picks a pod (prefix-cache + load aware) → vllm-sim |
-| 2. `kserve` | KServe `LLMInferenceService` with Envoy Gateway, the llm-d scheduler and vLLM CPU serving `facebook/opt-125m` | client → Envoy Gateway → llm-d scheduler → vLLM |
-
-By default each cluster is a single node that runs both the control plane and
-the workloads. For stage 1 you can use 1 control-plane + 2 workers instead, which
-puts the two simulator pods on different nodes:
-
-```bash
-make sim-cluster KIND_CONFIG=kind/cluster-multinode.yaml
-kubectl --context kind-llmd-sim get pods -n llm-d-sim -o wide   # after sim-pods
+```
+                         ┌───────────── one kind cluster ──────────────────────────────┐
+                         │                                                              │
+ client ─port-forward─▶  │  Gateway llm-gateway/inference-gateway  (Envoy Gateway +     │
+                         │        │                                Envoy AI Gateway)    │
+                         │        ├─ HTTPRoute /            ─▶ InferencePool demo       │
+                         │        │    (llm-d router chart)      EPP llm-d-sim/demo-epp │
+                         │        │                              ▶ vllm-sim × 2         │
+                         │        │                                                     │
+                         │        └─ HTTPRoute /kserve-demo/opt-125m  (created by KServe)│
+                         │                                       ▶ InferencePool + EPP  │
+                         │                                       ▶ vLLM CPU opt-125m    │
+                         └──────────────────────────────────────────────────────────────┘
 ```
 
-Each stage gets its own kind cluster (`llmd-sim`, `llmd-kserve`), because the
-two upstreams pin different Gateway API / Inference Extension CRD versions.
+The gateway is installed on its own (`make gateway`). Neither llm-d nor KServe
+installs it; both only attach `HTTPRoute`s to it:
+
+- the llm-d router chart through `httpRoute.inferenceGatewayName/Namespace`
+- KServe through `router.gateway.refs` in the `LLMInferenceService`, and its
+  default gateway setting (`kserve.controller.gateway.ingressGateway.kserveGateway`)
+
+For every request, Envoy asks the llm-d Endpoint Picker (EPP) over ext_proc
+which pod should serve it; the EPP picks by prompt-prefix cache affinity and load.
 
 ## Requirements
 
-- Linux with Docker, about 8 CPU cores and 16 GB RAM (stage 2 wants more headroom)
+- Linux with Docker, about 8 CPU cores and 16 GB RAM
 - `docker`, `kind`, `kubectl`, `helm`, `curl`, `jq`
 
 On Arch Linux:
@@ -46,21 +54,29 @@ make install-kube-extras-arch
 ```bash
 make help
 
-# Stage 1: simulated vLLM behind the llm-d router
-make sim-up          # or step by step:
-#   make sim-cluster   kind cluster
-#   make sim-router    InferencePool CRDs + llm-d router (Envoy + EPP)
-#   make sim-pods      2 simulated vLLM pods
-make sim-test        # one completion through Envoy -> EPP -> sim
-make sim-routing     # same-prefix requests; shows which pod served them
-make sim-down
+make cluster         # kind cluster (KIND_CONFIG=kind/cluster-multinode.yaml for 1 control-plane + 2 workers)
+make gateway         # Gateway API + InferencePool CRDs, Envoy Gateway, Envoy AI Gateway, shared Gateway
 
-# Stage 2: KServe + llm-d + vLLM on CPU
-make kserve-up       # runs KServe's pinned LLMISVC installer (cert-manager, Envoy Gateway,
-                     # Envoy AI Gateway, Gateway API, LWS, KServe), then deploys opt-125m
+# llm-d router + simulated vLLM
+make sim-router      # llm-d EPP + InferencePool + HTTPRoute on the shared Gateway
+make sim-pods        # 2 simulated vLLM pods
+make sim-test        # one completion through Gateway -> EPP -> sim
+make sim-routing     # shared-prefix vs unrelated prompts; per-pod request counts
+
+# KServe + vLLM on CPU, on the same Gateway
+make kserve-deps     # cert-manager
+make kserve-install  # KServe LLMInferenceService controller (helm charts), no gateway of its own
+make kserve-model    # facebook/opt-125m as an LLMInferenceService
 make kserve-test
-make kserve-down
+
+make down            # delete the cluster
 ```
+
+`make sim-up` and `make kserve-up` run their whole chain. `sim-clean`,
+`kserve-clean` and `gateway-clean` remove one layer and keep the rest.
+
+`ROUTER_MODE=standalone make sim-router` installs the router the other way:
+Envoy as a sidecar in the EPP pod, without the shared Gateway.
 
 All versions are pinned in [`versions.env`](versions.env).
 
@@ -68,15 +84,17 @@ All versions are pinned in [`versions.env`](versions.env).
 
 ```
 versions.env            pinned upstream versions
-kind/cluster.yaml       kind cluster config
-01-llm-d-sim/           router Helm values + simulator Deployment
+kind/                   single-node and multi-node cluster configs
+00-gateway/             GatewayClass (ClusterIP Envoy), shared Gateway, Envoy Gateway RBAC
+01-llm-d-sim/           router Helm values (gateway / standalone) + simulator Deployment
 02-kserve/              LLMInferenceService for opt-125m on CPU
 scripts/                tool check and test requests
 ```
 
 ## Upstream references
 
-- llm-d guides (`guides/optimized-baseline`, `guides/recipes/router`): https://github.com/llm-d/llm-d/tree/release-1.0
+- llm-d guides (`guides/optimized-baseline`, `guides/recipes/router`, `docs/infrastructure/gateway`): https://github.com/llm-d/llm-d/tree/release-1.0
 - llm-d inference simulator: https://github.com/llm-d/llm-d-inference-sim
 - Gateway API Inference Extension: https://github.com/kubernetes-sigs/gateway-api-inference-extension
+- Envoy AI Gateway: https://aigateway.envoyproxy.io/
 - KServe LLMInferenceService: https://kserve.github.io/website/docs/model-serving/generative-inference/llmisvc/llmisvc-overview
