@@ -36,6 +36,9 @@ On Arch Linux:
 make install-tools-arch   # pacman installs, enables docker, adds you to the docker group
 # log out and back in if it added you to the docker group
 make check-tools
+
+# optional: kubectx/kubens (aliases kx, kns) and kubectl-aliases (k, kgpo, kgpon ...)
+make install-kube-extras-arch
 ```
 
 ## Usage
